@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+set -e
+set -u
+
+FREQ="0.7"
+
+outs() {
+	local PIDS
+	#PIDS=$(ps aux | grep ^nixbld | cut -d" " -f2)
+	PIDS=$(pgrep -G nixbld)
+	local s
+	local PID
+	for PID in $PIDS; do
+		e=/proc/$PID/environ
+		if [ -f "$e" ]; then
+			s=$(strings "$e" | grep ^out=)
+			if [ -n "$s" ]; then
+				echo "$s $PID"
+			fi
+		fi
+	done | sort | cut -d'=' -f2-
+}
+
+_print() {
+	OUTS="$(outs)"
+	out_paths="$(echo "$OUTS" | cut -d' ' -f1 | uniq)"
+
+	printf "Summary per output\n"
+	printf "%s" "$OUTS" | cut -d' ' -f1 | uniq -c
+	printf '\n * * * \n\n'
+
+	for out in $out_paths ; do
+		echo " → $out"
+		PIDS=$(printf "%s" "$OUTS" | grep "$out" | cut -d' ' -f2 | tr '\n' ',' | sed -e 's/,$//' )
+		ps -eLf -q "$PIDS" | cut -b1-"$(tput cols)" | sort -n -k2
+	done
+}
+
+while true; do
+	v=$(_print | head -n"$(tput lines)")
+	clear
+	printf "%s" "$v"
+	sleep "$FREQ"
+done
