@@ -1,45 +1,120 @@
-#!/usr/bin/env bash
+#!/usr/bin/env ruby
 
-set -e
-set -u
+require "shellwords"
+require "optparse"
 
-FREQ="0.7"
+DEFAULTS = {
+  delay: 0.5,
+  once: false,
+}.freeze
 
-outs() {
-	local PIDS
-	#PIDS=$(ps aux | grep ^nixbld | cut -d" " -f2)
-	PIDS=$(pgrep -G nixbld)
-	local s
-	local PID
-	for PID in $PIDS; do
-		e=/proc/$PID/environ
-		if [ -f "$e" ]; then
-			s=$(strings "$e" | grep ^out=)
-			if [ -n "$s" ]; then
-				echo "$s $PID"
-			fi
-		fi
-	done | sort | cut -d'=' -f2-
-}
+options = DEFAULTS.dup
 
-_print() {
-	OUTS="$(outs)"
-	out_paths="$(echo "$OUTS" | cut -d' ' -f1 | uniq)"
+OptionParser.new do |opts|
+  opts.banner = "Usage: nix-top [options]"
 
-	printf "Summary per output\n"
-	printf "%s" "$OUTS" | cut -d' ' -f1 | uniq -c
-	printf '\n * * * \n\n'
+  opts.on("-d", "--delay [seconds]", Integer, "In seconds (default: #{DEFAULTS[:delay]})") do |v|
+    options[:delay] = v
+  end
+  opts.on("-1", "--once", "Only run once (generates one screen)") do |v|
+    options[:once] = v;
+  end
+end.parse!
 
-	for out in $out_paths ; do
-		echo " → $out"
-		PIDS=$(printf "%s" "$OUTS" | grep "$out" | cut -d' ' -f2 | tr '\n' ',' | sed -e 's/,$//' )
-		ps -eLf -q "$PIDS" | cut -b1-"$(tput cols)" | sort -n -k2
-	done
-}
+VT_CLEAR_LINE=`tput el`
+VT_CLEAR_REST=`tput ed`
+VT_HOME=`tput cup 0 0`
 
-while true; do
-	v=$(_print | head -n"$(tput lines)")
-	clear
-	printf "%s" "$v"
-	sleep "$FREQ"
-done
+# Returns [width, height] of the terminal.
+def size()
+  `echo 'cols\nlines' | tput -S`.strip.split("\n").map(&:to_i)
+end
+
+# Returns a mostly correct snapshot of the PIDs for processes building
+# things, in a Hash indexed by out paths.
+def get_processes()
+  `pgrep -G nixbld`.strip.split("\n")
+  .map do |pid|
+    file = "/proc/#{pid.shellescape}/environ"
+    [
+      pid,
+      begin
+        # This can fail if the process disappears while trying to read.
+        # This is why we rescue everything
+        # (This also could fail due to missing `out=` and we get free rescue)
+        File.read(file)                          # Reads process' environment
+          .split("\0")                           # (which is a null-delimited list)
+          .grep(/^out=/)                         # Keep out paths
+          .first                                 # Keep the only result
+          .split("=", 2).last                    # Keep only the value
+      rescue
+        nil
+      end
+    ]
+  end
+  .select { |pair| !!pair.last } # removes nils
+  .to_h
+  .reduce({}) do |coll, (pid, out)|
+    coll[out] ||= []
+    coll[out] << pid
+    coll
+  end
+end
+
+def per_output_infos(out, pids)
+  [
+    " → %s" % [out],
+    `ps -eLf -q "#{pids.join(",").shellescape}" | sort -n -k2`
+  ]
+end
+
+# A "screenful" of information
+# Does not trim output to fit in one terminal screen.
+def print_screen()
+  processes = get_processes()
+  lines = []
+  sep = [
+    "",
+    " * * * ",
+    "",
+  ]
+
+  lines << "Summary per output"
+  lines.concat(processes.map do |out, pids|
+    "    %4d → %s" % [pids.length, out]
+  end)
+  lines.concat(sep)
+  lines.concat(processes.map do |out, pids|
+    per_output_infos(out, pids)
+  end)
+
+  # This is hacky and round-about...
+  # but the consumers will assume this gives *lines*.
+  # I don't want to ensure everything is already a line.
+  # So, uh, joining everything and re-splitting is done for now.
+  # TODO : better API for writing a screen.
+  lines.flatten.join("\n").split("\n")
+end
+
+# Trims the "screenful" to fit into the screen.
+def display(screen)
+  width, height = size
+  screen = screen[0...height].map do |line|
+    line[0...width] + VT_CLEAR_LINE
+  end.join("\n").strip
+
+  print VT_HOME + screen + VT_CLEAR_REST
+end
+
+# ------------------------------------------------------------------------------
+
+if options[:once] then
+  display(print_screen)
+  puts ""
+  exit 0
+end
+
+while true do
+  display(print_screen)
+  sleep options[:delay]
+end
