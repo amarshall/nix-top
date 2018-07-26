@@ -5,6 +5,7 @@
 let
   inherit (pkgs)
     stdenv lib
+    ruby
     makeWrapper
     procps               # ps
     ncurses              # tput
@@ -14,11 +15,16 @@ in
   stdenv.mkDerivation {
     name = "nix-top";
     buildInputs = [
+      ruby
       makeWrapper
     ];
-    buildCommand = ''
+
+    src = ./nix-top;
+    unpackCmd = "mkdir -p src; cp $curSrc src/nix-top";
+    
+    installPhase = ''
       mkdir -p $out/bin/
-      cp ${./nix-top} $out/bin/nix-top
+      cp ./nix-top $out/bin/nix-top
       chmod +x $out/bin/nix-top
       wrapProgram $out/bin/nix-top \
         --prefix PATH : ${
