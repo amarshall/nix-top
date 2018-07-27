@@ -10,6 +10,7 @@ let
     procps               # ps
     ncurses              # tput
     binutils-unwrapped   # strings
+    findutils
   ;
 in
   stdenv.mkDerivation {
@@ -28,7 +29,7 @@ in
       chmod +x $out/bin/nix-top
       wrapProgram $out/bin/nix-top \
         --prefix PATH : ${
-          lib.makeBinPath [ncurses procps binutils-unwrapped]
+          lib.makeBinPath [ncurses procps binutils-unwrapped findutils]
         }
     '';
   }

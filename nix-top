@@ -30,41 +30,68 @@ def size()
   `echo 'cols\nlines' | tput -S`.strip.split("\n").map(&:to_i)
 end
 
-# Returns a mostly correct snapshot of the PIDs for processes building
-# things, in a Hash indexed by out paths.
-def get_processes()
-  `pgrep -G nixbld`.strip.split("\n")
-  .map do |pid|
-    file = "/proc/#{pid.shellescape}/environ"
-    [
-      pid,
-      begin
-        # This can fail if the process disappears while trying to read.
-        # This is why we rescue everything
-        # (This also could fail due to missing `out=` and we get free rescue)
-        File.read(file)                          # Reads process' environment
-          .split("\0")                           # (which is a null-delimited list)
-          .grep(/^out=/)                         # Keep out paths
-          .first                                 # Keep the only result
-          .split("=", 2).last                    # Keep only the value
-      rescue
-        nil
-      end
-    ]
-  end
-  .select { |pair| !!pair.last } # removes nils
-  .to_h
-  .reduce({}) do |coll, (pid, out)|
-    coll[out] ||= []
-    coll[out] << pid
-    coll
+def build_users()
+  File.read("/etc/passwd").strip().split("\n").grep(/^nixbld\d+:/).map do |line|
+    line.split(":").first
   end
 end
 
-def per_output_infos(out, pids)
+def active_build_users()
+  build_users.select do |name|
+    `pgrep -fu #{name.shellescape}`
+    $? == 0
+  end
+end
+
+# Returns a mostly correct snapshot of the PIDs for processes building
+# things, in a Hash indexed by build user.
+def get_processes()
+  active_build_users.map do |user|
+    pids = `pgrep -u #{user.shellescape}`
+        .strip.split("\n")
+        .map(&:to_i)
+        .sort
+    path = get_out_path(user, pids.first)
+
+    [
+      user,
+      [path, pids]
+    ]
+  end
+end
+
+# Gets either the out path, or an approximation, depending whether
+# or not it can peek into processes.
+def get_out_path(user, pid)
+  file = "/proc/#{pid.to_s.shellescape}/environ"
+  begin
+    # This can fail if the process disappears while trying to read.
+    # This is why we rescue everything
+    # (This also could fail due to missing `out=` and we get free rescue)
+    File.read(file)                          # Reads process' environment
+      .split("\0")                           # (which is a null-delimited list)
+      .grep(/^out=/)                         # Keep out paths
+      .first                                 # Keep the only result
+      .split("=", 2).last                    # Keep only the value
+  rescue
+    begin
+    # whew!
+    `find /tmp -maxdepth 1 -user #{user.shellescape} -exec stat --printf '%Z:%n\\n' '{}' ';' | sort -n`
+      .strip
+      .split("\n")
+      .last
+      .split(":")
+      .last
+    rescue
+      "(unknown)"
+    end
+  end
+end
+
+def per_output_infos(user, pids, path)
   [
-    " → %s" % [out],
-    `ps -eLf -q "#{pids.join(",").shellescape}" | sort -n -k2`
+    ":: (%s) → %s" % [user, path],
+    `ps -eLf -q "#{pids.join(",").shellescape}"`
   ]
 end
 
@@ -72,6 +99,7 @@ end
 # Does not trim output to fit in one terminal screen.
 def print_screen()
   processes = get_processes()
+
   lines = []
   sep = [
     "",
@@ -80,12 +108,12 @@ def print_screen()
   ]
 
   lines << "Summary per output"
-  lines.concat(processes.map do |out, pids|
-    "    %4d → %s" % [pids.length, out]
+  lines.concat(processes.map do |user, (path, pids)|
+    "    %4d → %s" % [pids.length, path]
   end)
   lines.concat(sep)
-  lines.concat(processes.map do |out, pids|
-    per_output_infos(out, pids)
+  lines.concat(processes.map do |user, (path, pids)|
+    per_output_infos(user, pids, path)
   end)
 
   # This is hacky and round-about...
