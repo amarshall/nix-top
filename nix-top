@@ -13,7 +13,7 @@ options = DEFAULTS.dup
 OptionParser.new do |opts|
   opts.banner = "Usage: nix-top [options]"
 
-  opts.on("-d", "--delay [seconds]", Integer, "In seconds (default: #{DEFAULTS[:delay]})") do |v|
+  opts.on("-d", "--delay [seconds]", Numeric, "In seconds (default: #{DEFAULTS[:delay]})") do |v|
     options[:delay] = v
   end
   opts.on("-1", "--once", "Only run once (generates one screen)") do |v|
