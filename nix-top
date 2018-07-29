@@ -63,8 +63,8 @@ end
 # Gets either the out path, or an approximation, depending whether
 # or not it can peek into processes.
 def get_out_path(user, pid)
-  file = "/proc/#{pid.to_s.shellescape}/environ"
   begin
+    file = "/proc/#{pid}/environ"
     # This can fail if the process disappears while trying to read.
     # This is why we rescue everything
     # (This also could fail due to missing `out=` and we get free rescue)
