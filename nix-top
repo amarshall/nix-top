@@ -2,6 +2,7 @@
 
 require "shellwords"
 require "optparse"
+require "io/wait"
 
 DEFAULTS = {
   delay: 0.5,
@@ -24,6 +25,10 @@ end.parse!
 VT_CLEAR_LINE=`tput el`
 VT_CLEAR_REST=`tput ed`
 VT_HOME=`tput cup 0 0`
+
+def stty(*flags)
+  `#{["stty", *flags].shelljoin}`
+end
 
 # Returns [width, height] of the terminal.
 def size()
@@ -134,7 +139,45 @@ def display(screen)
   print VT_HOME + screen + VT_CLEAR_REST
 end
 
+def quit()
+  puts ""
+  stty("echo")
+  exit 0
+end
+
+# Time with milliseconds
+def milli()
+  Time.now().strftime("%s.%L").to_f
+end
+
+def char_if_pressed
+  begin
+    state = stty("-g")
+    stty("raw", "-echo", "-icanon", "isig")
+    $stdin.getc.chr if $stdin.ready?
+  ensure
+    system("stty #{state}")
+  end
+end
+
+def handle_input
+  case char_if_pressed
+  when nil
+    nil
+  when "q"
+    quit
+  else
+    # Refresh on any other presses.
+    display(print_screen)
+  end
+end
+
 # ------------------------------------------------------------------------------
+
+# Ensures no backtrace on ^C
+Signal.trap("INT") do
+  quit
+end
 
 if options[:once] then
   display(print_screen)
@@ -142,7 +185,18 @@ if options[:once] then
   exit 0
 end
 
+# stdin shouldn't echo during the app's lifetime.
+stty("-echo")
+
 while true do
   display(print_screen)
-  sleep options[:delay]
+
+  # The next block uses non-blocking read, while
+  # also waiting for the delay.
+  # It is equivalent to this: + non-blocking reads.
+  # sleep options[:delay]
+  wait_for = milli() + options[:delay]
+  until milli() >= wait_for do
+    handle_input()
+  end
 end
