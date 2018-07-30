@@ -6,6 +6,7 @@
 , ncurses              # tput
 , procps               # ps
 , binutils-unwrapped   # strings
+, coreutils
 , findutils
 }:
 
@@ -22,7 +23,7 @@ stdenv.mkDerivation rec {
     makeWrapper
   ];
 
-  ADDITIONAL_PATH = lib.makeBinPath [ getent ncurses binutils-unwrapped findutils ];
+  ADDITIONAL_PATH = lib.makeBinPath [ getent ncurses binutils-unwrapped coreutils findutils ];
 
   installPhase = ''
     mkdir -p $out/bin/
