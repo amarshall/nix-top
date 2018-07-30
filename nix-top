@@ -31,14 +31,12 @@ def stty(*flags)
 end
 
 # Returns [width, height] of the terminal.
-def size()
+def size
   `echo 'cols\nlines' | tput -S`.strip.split("\n").map(&:to_i)
 end
 
-def build_users()
-  File.read("/etc/passwd").strip().split("\n").grep(/^nixbld\d+:/).map do |line|
-    line.split(":").first
-  end
+def build_users
+  `getent group nixbld`.strip.split(":").last.split(",")
 end
 
 def active_build_users()
@@ -96,7 +94,7 @@ end
 def per_output_infos(user, pids, path)
   [
     ":: (%s) → %s" % [user, path],
-    `ps -eLf -q "#{pids.join(",").shellescape}"`
+    `ps -o uid,pid,ppid,stime,time,command -U "#{user.shellescape}"`
   ]
 end
 

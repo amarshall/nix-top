@@ -2,8 +2,9 @@
 , lib
 , ruby
 , makeWrapper
-, procps               # ps
+, getent               # /etc/passwd
 , ncurses              # tput
+, procps               # ps
 , binutils-unwrapped   # strings
 , findutils
 }:
@@ -21,8 +22,8 @@ stdenv.mkDerivation rec {
     makeWrapper
   ];
 
-  ADDITIONAL_PATH = lib.makeBinPath [ncurses procps binutils-unwrapped findutils];
-  
+  ADDITIONAL_PATH = lib.makeBinPath [ getent ncurses binutils-unwrapped findutils ];
+
   installPhase = ''
     mkdir -p $out/bin/
     cp ./nix-top $out/bin/nix-top
