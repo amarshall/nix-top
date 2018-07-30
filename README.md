@@ -13,10 +13,3 @@ Usage: nix-top [options]
    -1, --once                       Only run once (generates one screen)
 
 ```
-
-### Privilege
-
-If this script has enough privileges to read the `nixbld` user's processes
-informations under `/proc/`, it will show the out path.
-
-If it doesn't, it will make assumptions based on the contents of `/tmp`.
