@@ -31,14 +31,12 @@ def stty(*flags)
 end
 
 # Returns [width, height] of the terminal.
-def size()
+def size
   `echo 'cols\nlines' | tput -S`.strip.split("\n").map(&:to_i)
 end
 
-def build_users()
-  File.read("/etc/passwd").strip().split("\n").grep(/^nixbld\d+:/).map do |line|
-    line.split(":").first
-  end
+def build_users
+  `getent group nixbld`.strip.split(":").last.split(",")
 end
 
 def active_build_users()
@@ -69,34 +67,35 @@ end
 # or not it can peek into processes.
 def get_out_path(user, pid)
   begin
-    file = "/proc/#{pid}/environ"
+  # whew!
+  build_dir = `find -L /tmp -maxdepth 1 -user #{user.shellescape} -exec stat --printf '%Z:%n\\n' '{}' ';' | sort -n`
+    .strip
+    .split("\n")
+    .last
+    .split(":")
+    .last
+  rescue
+    "(unknown)"
+  end
+  begin
+    file = "#{build_dir}/env-vars"
     # This can fail if the process disappears while trying to read.
     # This is why we rescue everything
     # (This also could fail due to missing `out=` and we get free rescue)
     File.read(file)                          # Reads process' environment
-      .split("\0")                           # (which is a null-delimited list)
-      .grep(/^out=/)                         # Keep out paths
+      .split("\n")                           # (which is a null-delimited list)
+      .grep(/^declare -x out=/)              # Keep out paths
       .first                                 # Keep the only result
-      .split("=", 2).last                    # Keep only the value
+      .split("\"").last                      # Keep only the value
   rescue
-    begin
-    # whew!
-    `find /tmp -maxdepth 1 -user #{user.shellescape} -exec stat --printf '%Z:%n\\n' '{}' ';' | sort -n`
-      .strip
-      .split("\n")
-      .last
-      .split(":")
-      .last
-    rescue
-      "(unknown)"
-    end
+    build_dir
   end
 end
 
 def per_output_infos(user, pids, path)
   [
     ":: (%s) → %s" % [user, path],
-    `ps -eLf -q "#{pids.join(",").shellescape}"`
+    `ps -o uid,pid,ppid,stime,time,command -U "#{user.shellescape}"`
   ]
 end
 

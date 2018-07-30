@@ -2,9 +2,11 @@
 , lib
 , ruby
 , makeWrapper
-, procps               # ps
+, getent               # /etc/passwd
 , ncurses              # tput
+, procps               # ps
 , binutils-unwrapped   # strings
+, coreutils
 , findutils
 }:
 
@@ -21,13 +23,15 @@ stdenv.mkDerivation rec {
     makeWrapper
   ];
 
-  ADDITIONAL_PATH = lib.makeBinPath [ncurses procps binutils-unwrapped findutils];
-  
+  ADDITIONAL_PATH = lib.makeBinPath [ getent ncurses binutils-unwrapped coreutils findutils ];
+
   installPhase = ''
-    mkdir -p $out/bin/
+    mkdir -p $out/bin $out/libexec/nix-top
     cp ./nix-top $out/bin/nix-top
     chmod +x $out/bin/nix-top
     wrapProgram $out/bin/nix-top \
-      --prefix PATH : "${ADDITIONAL_PATH}"
+      --prefix PATH : "$out/libexec/nix-top:${ADDITIONAL_PATH}"
+  '' + stdenv.lib.optionalString stdenv.isDarwin ''
+    ln -s /bin/stty $out/libexec/nix-top
   '';
 }
