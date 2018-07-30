@@ -13,7 +13,7 @@
 # No gems used, so mkDerivation is fine.
 stdenv.mkDerivation rec {
   name = "nix-top-${version}";
-  version = "0.1.0";
+  version = "0.2.0";
 
   src = ./nix-top;
   unpackCmd = "mkdir -p src; cp $curSrc src/nix-top";
