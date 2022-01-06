@@ -1,6 +1,18 @@
 Changelog
 =========
 
+v0.3.0
+------
+
+> *2022-01-05*
+
+Through a contribution from @ncfavier, event handling was improved.
+
+ - Makes sure to restore the terminal state properly on exit.
+ - Reduces CPU usage by using `wait_readable` instead of busy-waiting.
+ - Quits instantly upon pressing q even if other keys have been pressed.
+
+
 v0.2.0
 ------
 
