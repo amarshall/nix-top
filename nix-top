@@ -138,64 +138,29 @@ def display(screen)
   print VT_HOME + screen + VT_CLEAR_REST
 end
 
-def quit()
-  puts ""
-  stty("echo")
-  exit 0
-end
-
-# Time with milliseconds
-def milli()
-  Time.now().strftime("%s.%L").to_f
-end
-
-def char_if_pressed
-  begin
-    state = stty("-g")
-    stty("raw", "-echo", "-icanon", "isig")
-    $stdin.getc.chr if $stdin.ready?
-  ensure
-    system("stty #{state}")
-  end
-end
-
-def handle_input
-  case char_if_pressed
-  when nil
-    nil
-  when "q"
-    quit
-  else
-    # Refresh on any other presses.
-    display(print_screen)
-  end
-end
-
 # ------------------------------------------------------------------------------
 
 # Ensures no backtrace on ^C
 Signal.trap("INT") do
-  quit
+  exit
 end
 
-if options[:once] then
-  display(print_screen)
+at_exit {
+  stty($saved_stty)
   puts ""
-  exit 0
-end
+  exit
+}
+$saved_stty = stty("-g").strip
+stty("-echo", "-icanon")
 
-# stdin shouldn't echo during the app's lifetime.
-stty("-echo")
+display(print_screen)
+
+exit if options[:once]
 
 while true do
-  display(print_screen)
-
-  # The next block uses non-blocking read, while
-  # also waiting for the delay.
-  # It is equivalent to this: + non-blocking reads.
-  # sleep options[:delay]
-  wait_for = milli() + options[:delay]
-  until milli() >= wait_for do
-    handle_input()
+  if $stdin.wait_readable(options[:delay]) then
+    exit if $stdin.readpartial(4096).include? "q"
   end
+
+  display(print_screen)
 end
