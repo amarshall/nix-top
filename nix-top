@@ -58,10 +58,12 @@ def get_processes()
         .sort
     path = get_out_path(user, pids.first)
 
-    [
-      user,
-      [path, pids]
-    ]
+    {
+      user: user,
+      path: path,
+      pids: pids,
+      per_output_infos: per_output_infos(user, pids, path),
+    }
   end
 end
 
@@ -97,7 +99,7 @@ end
 def per_output_infos(user, pids, path)
   [
     ":: (%s) → %s" % [user, path],
-    `ps -o uid,pid,ppid,stime,time,command -U "#{user.shellescape}"`
+    *(`ps -o uid,pid,ppid,stime,time,command -U "#{user.shellescape}"`.split("\n")),
   ]
 end
 
@@ -114,12 +116,15 @@ def print_screen()
   ]
 
   lines << "Summary per output"
-  lines.concat(processes.map do |user, (path, pids)|
-    "    %4d → %s" % [pids.length, path]
+  lines.concat(processes.map do |process|
+    "    %4d (%s) → %s" % [
+      process[:pids].length,
+      process[:path],
+    ]
   end)
   lines.concat(sep)
-  lines.concat(processes.map do |user, (path, pids)|
-    per_output_infos(user, pids, path)
+  lines.concat(processes.map do |process|
+    ['', *process[:per_output_infos]]
   end)
 
   # This is hacky and round-about...
