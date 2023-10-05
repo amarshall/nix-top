@@ -99,8 +99,20 @@ end
 def per_output_infos(user, pids, path)
   [
     ":: (%s) → %s" % [user, path],
-    *(`ps -o uid,pid,ppid,stime,time,command -U "#{user.shellescape}"`.split("\n")),
+    *(`ps -o uid,pid,ppid,stime,etimes,time,command -U "#{user.shellescape}"`.split("\n")),
   ]
+end
+
+def get_duration(output_infos)
+  seconds = output_infos
+    .drop(2)
+    .map { |info| Integer(info.strip.split(/\s+/, 7)[4]) } # get etimes
+    .max
+  # hack, fails for >24 h
+  Time.at(seconds || 0).utc
+    .strftime('%Hh%Mm%Ss')
+    .sub('00h00m', '      ')
+    .sub('00h', '   ')
 end
 
 # A "screenful" of information
@@ -119,6 +131,7 @@ def print_screen()
   lines.concat(processes.map do |process|
     "    %4d (%s) → %s" % [
       process[:pids].length,
+      get_duration(process[:per_output_infos]),
       process[:path],
     ]
   end)
