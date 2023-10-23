@@ -19,7 +19,7 @@ OptionParser.new do |opts|
   opts.on("-d", "--delay [seconds]", Numeric, "In seconds (default: #{DEFAULTS[:delay]})") do |v|
     options[:delay] = v
   end
-  opts.on("-1", "--once", "Only run once (generates one screen)") do |v|
+  opts.on("-1", "--once", "Only run once") do |v|
     options[:once] = v;
   end
 end.parse!
@@ -200,9 +200,12 @@ at_exit {
 $saved_stty = stty("-g").strip
 stty("-echo", "-icanon")
 
-display(print_screen)
-
-exit if options[:once]
+if options[:once]
+  print print_screen.join("\n").strip
+  exit
+else
+  display(print_screen)
+end
 
 while true do
   if $stdin.wait_readable(options[:delay]) then
