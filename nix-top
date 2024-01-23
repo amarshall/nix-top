@@ -28,6 +28,8 @@ VT_CLEAR_LINE=`tput el`
 VT_CLEAR_REST=`tput ed`
 VT_HOME=`tput cup 0 0`
 
+ETIME_PATTERN = /^((?<days>\d)+-)?((?<hrs>\d+):)?(?<mins>\d+):(?<secs>\d+)$/
+
 def stty(*flags)
   `#{["stty", *flags].shelljoin}`
 end
@@ -99,20 +101,45 @@ end
 def per_output_infos(user, pids, path)
   [
     ":: (%s) → %s" % [user, path],
-    *(`ps -o uid,pid,ppid,stime,etimes,time,command -U "#{user.shellescape}"`.split("\n")),
+    *(`ps -o uid,pid,ppid,stime,etime,time,command -U "#{user.shellescape}"`.split("\n")),
   ]
 end
 
+def parse_etime_to_duration(str)
+  ETIME_PATTERN.match(str).named_captures.transform_keys(&:to_sym).transform_values do |val|
+    if val
+      val = val.sub(/^0+(?!$)/, '')
+      val = '0' if val.empty?
+      Integer(val)
+    else
+      0
+    end
+  end.tap do |duration|
+    duration[:hrs] += duration.delete(:days)
+  end
+end
+
+def duration_to_seconds(duration)
+  60 * (duration.fetch(:secs) + (
+    60 * (duration.fetch(:mins) + (
+      60 * duration.fetch(:hrs)
+    ))
+  ))
+end
+
 def get_duration(output_infos)
-  seconds = output_infos
+  duration = output_infos
     .drop(2)
-    .map { |info| Integer(info.strip.split(/\s+/, 7)[4]) } # get etimes
-    .max
-  # hack, fails for >24 h
-  Time.at(seconds || 0).utc
-    .strftime('%Hh%Mm%Ss')
-    .sub('00h00m', '      ')
-    .sub('00h', '   ')
+    .map { |info| parse_etime_to_duration(info.strip.split(/\s+/, 7)[4]) } # get etime
+    .max_by { |duration| duration_to_seconds(duration) }
+
+  if duration
+    sprintf("%<hrs>02dh%<mins>02dm%<secs>02ds", duration)
+      .sub('00h00m', '      ')
+      .sub('00h', '   ')
+  else
+    '         '
+  end
 end
 
 # A "screenful" of information
